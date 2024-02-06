@@ -1,0 +1,155 @@
+---
+title: "**Homework 3**"
+author: "Shaliha Guarnera - SDS 315 - scg2595 - [GitHub Repository](https://github.com/shalihaguarnera/SDS315HW3.git)"
+date: "February 2024"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE)
+```
+
+```{r}
+
+creatinine <- read.csv("creatinine.csv")
+marketmodel <- read.csv("marketmodel.csv")
+covid <- read.csv("covid.csv")
+milk <- read.csv("milk.csv")
+library(ggplot2)
+library(tidyverse)
+library(RColorBrewer)
+library(kableExtra)
+library(dplyr)
+library(rvest)
+library(sas7bdat)
+library(stringr)
+library(lubridate)
+library(reshape2)
+library(htmltools)
+
+```
+
+\newpage
+
+## **Problem 1: Creatinine Clearance Rate**
+
+### **Part A**
+
+```{r}
+
+#Finding the intercept and rate of change/slope for the creatinine clearance 
+model_cr <- lm(creatclear ~ age, data = creatinine)
+intercept <- coef(model_cr)[1]
+slope <- coef(model_cr)[2]
+
+#Calculating the creatinine rate for a 55 year old using the coefficients found previously
+creatinine_age55 <- intercept + (slope*55)
+
+```
+
+We should expect a creatinine clearance rate of `r round(creatinine_age55, 3)` ml/minute for a 55 year old. This was determined by creating a linear regression model, using the lm() function, of the creatinine clearance rate variable and patient age variable from the creatinine dataset, with age as the predictor variable and clearance rate as the response variable. Following this, the coef() function was utilized to extract model coefficients, specifically the intercept and slope. These values were used in a linear regression equation, with 55 as x (age) to determine the creatinine clearance rate of a 55 year old.
+
+### **Part B**
+
+The rate of change between creatinine clearance rate and age is `r round(slope, 3)` ml/minute per year. This was the slope taken from the linear model from Part A, as it represents how much the creatinine clearance rate change as age changes. 
+
+### **Part C**
+
+```{r}
+
+#Calculating the difference between actual and predicted clearance rate for a 40 and 60 year old
+forty_year_old <- 135 - (intercept + slope * 40)
+sixty_year_old <- 112 - (intercept + slope * 60)
+
+```
+
+The 40-year-old has a healthier creatinine clearance rate compared to the 60-year-old. Since the two patients have different ages, we will need to make a fair comparison between the two to adjust for the systematic effect of age. This was done by comparing the individual patient's actual and predicted creatinine clearance rate from the linear model created in the previous parts. For each of the two patients, their predicted clearance rate was subtracted from their actual actual clearance rate. The equation actual rate - (intercept + slope * age) represents this relationship. The 40-year-old patient had a difference of `r round(forty_year_old, 3)` while the 60-year-old had a difference of `r round(sixty_year_old, 3)`. Both of the patients' differences were positive, signifying that both patients had a higher creatinine clearance rate than predicted; however, the 40-year-old had a higher difference, thus having a healthier creatinine clearance rate for their age.
+
+## **Problem 2: Stock Rate of Returns**
+
+The 'beta' of a stock is what finance professionals refer to as the systematic risk of the market as a whole, as a portion of the total risk of a firm's stock. It is also considered the slope in a regression model between the rate of return for an individual stock at a given time period and the rate of return of the stock market in its entirety in the same time period. For a 1% change in the market portfolio, the beta is the percent change in an individual asset's return. A beta of less than 1 indicates that the stock has less systematic risk in comparison to the average firm. A beta of more than 1 represents more systematic risk compared to the average firm, where the systematic risk of the average firm is 1. When the market goes up, a firm with a stock of over 1 will also go up substantially more than the remainder of the market. When the market goes down, a firm with a stock of over 1 will fall further than the rest of the market. 
+
+```{r}
+
+#Creating a table of the regression for individual stocks
+reg_table <- tibble()
+stock_variables <- c("AAPL", "GOOG", "MRK", "JNJ", "WMT", "TGT")
+
+for (stock in stock_variables){
+  stock_model <- lm(get(stock) ~ SPY, data = marketmodel)
+  
+  results <- tibble(
+    Stock = stock,
+    Intercept = format(coef(stock_model)[1], digits = 3, scientific = FALSE),
+    Slope = format(coef(stock_model)[2], digits = 3, scientific = FALSE),
+    Rsquared = format(summary(stock_model)$r.squared, digits = 3, scientific = FALSE)
+  )
+  reg_table <- rbind(reg_table, results)
+}
+
+kable_styling(kable(reg_table, format = 'latex', align = 'lcccc', digits = 5, escape = FALSE, linesep = rep('', 6),
+                    booktabs = TRUE), position = 'left', latex_options = 'hold_position')
+
+```   
+
+
+The table above portrays the regression of returns for each of the 6 stocks individually in the marketmodel.csv dataset, using the return of S&P 500 (denoted SPY) as a proxy for the whole market. The table consists of 4 columns, with the name of the stock, its intercept, slope (beta), and R-squared. The ticker symbols are interpreted as AAPL (Apple), GOOG (Google), MRK (Merck), JNJ (Johnson & Johnson), WMT (Walmart), TGT (Target). 
+
+In light of the analysis, the stock with the lowest systematic risk was WMT (Walmart) and the stock with the highest systematic risk was AAPL (Apple). This is due to the fact that a beta of less than 1 means that the firm has less systematic risk than average, and a beta of more than 1 has more systemic risk on average. 
+
+## **Problem 3: Reported COVID-19 Deaths in Italy and Spain **
+
+```{r}
+
+#Creating subsets for Italy observations and Spain observations
+covid_italy <- covid %>%
+  filter(country == 'Italy')
+
+covid_spain <- covid %>%
+  filter(country == 'Spain')
+
+#Creating linear models for the separate countries
+lm_italy <- lm(log(deaths) ~ days_since_first_death, data = covid_italy)
+slope_italy <- coef(lm_italy)[2]
+
+lm_spain <- lm(log(deaths) ~ days_since_first_death, data = covid_spain)
+slope_spain <- coef(lm_spain)[2]
+
+#Calculating the doubling time for the countries
+doubling_time_italy <- (70 / (slope_italy * 100))
+doubling_time_spain <- (70 / (slope_spain * 100))
+
+```
+
+The estimated growth rate for Italy is `r round(slope_italy, 3)` deaths per days since first death with a doubling time of `r round(doubling_time_italy)` days, while Spain has an estimated growth rate of `r round(slope_spain, 3)` deaths per days since first death and a doubling time of `r round(doubling_time_spain)` days. 
+
+```{r}
+
+ggplot(covid) +
+  geom_line(aes(x = days_since_first_death, y = deaths, color = country)) +
+  labs(title = 'Reported Daily COVID-19 Deaths Over Time by Country', x = 'Days Since First Death', 
+       y = 'Number of COVID-19 Deaths', col = 'Country') +
+  scale_color_manual(values=c('Italy' = 'lightpink', 'Spain' = 'lightblue')) +
+  theme_minimal()
+
+```
+
+The line graph depicts the reported daily COVID-19 deaths over time in the countries Italy and Spain, distinguished by the different colors. Based on the graph, Spain was quicker to peak in deaths compared to Italy, who majorly had fewer COVID-19 deaths at a given time compared to Spain. 
+
+## **Problem 4: Price Elasticity of Demand For Milk**
+
+```{r}
+
+lm_price = lm(log(sales) ~ log(price), data = milk)
+price_elasticity <- coef(lm_price)[2]
+
+```
+
+The estimated price elasticity of demand for milk is `r round(price_elasticity, 3)`. For price elasticity, economists follow the power-law model, where *P* is price, *Q* is quantity demanded by consumers at that given price, and as the price elasticity of demand. This is derived from the linear relationship on a log-log scale, in this case between milk price and milk sales, since their relationship on a normal scale is not linear. Using this knowledge, the elasticity of demand for milk was calculated by creating a linear model of the log of milk sales in relation to the log of milk price, where the slope/rate of change from the model represents elasticity.
+
+
